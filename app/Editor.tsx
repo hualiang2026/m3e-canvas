@@ -555,6 +555,8 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
   /** the groups before and after the last tidy; "undo" is offered only while the after-state is still current */
   const tidyRef = useRef<{ frameId: string; before: Group[]; after: Group[] } | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI);
+  /** provider settings being edited; only copied into aiSettings when Save is pressed */
+  const [aiDraft, setAiDraft] = useState<AiSettings>(DEFAULT_AI);
   const [aiBusy, setAiBusy] = useState(false);
   /** the screen the model is working on, which wears the animated ring meanwhile */
   const [aiFrameId, setAiFrameId] = useState<string | null>(null);
@@ -797,7 +799,9 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
         setFrames([{ ...SEED_FRAMES[0], name: t("home", initialLang) }]);
       }
     } catch {}
-    setAiSettings(loadAiSettings());
+    const restoredAi = loadAiSettings();
+    setAiSettings(restoredAi);
+    setAiDraft(restoredAi);
     loadedRef.current = true;
     /* the document is in state; one frame later it is on screen and the boot overlay may go.
        Not cancelled on cleanup: the development double-run skips this effect the second time. */
@@ -2973,7 +2977,12 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
     toastTimer.current = window.setTimeout(() => setToast(null), ms);
   };
 
-  const updateAiSettings = (s: AiSettings) => {
+  const updateAiDraft = (s: AiSettings) => {
+    setAiDraft(s);
+  };
+
+  const saveAiSettingsDraft = (s: AiSettings) => {
+    setAiDraft(s);
     setAiSettings(s);
     saveAiSettings(s);
   };
@@ -4140,7 +4149,7 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
                 ) : leftTab === "motion" ? (
                   <MotionPanel p={p} theme={theme} onChange={patchTheme} />
                 ) : leftTab === "ai" ? (
-                  <AiPanel p={p} settings={aiSettings} onSettings={updateAiSettings} />
+                  <AiPanel p={p} settings={aiDraft} savedSettings={aiSettings} onChange={updateAiDraft} onSave={saveAiSettingsDraft} />
                 ) : (
                   <LayersPanel
                     p={p}

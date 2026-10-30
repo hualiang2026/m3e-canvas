@@ -18,10 +18,10 @@ export type AiSettings = {
 };
 
 export const PROVIDERS: { key: Provider; label: string; baseUrl: string; model: string; keysUrl?: string }[] = [
-  { key: "openai", label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-5.6-luna", keysUrl: "https://platform.openai.com/api-keys" },
+  { key: "openai", label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-6-luna", keysUrl: "https://platform.openai.com/api-keys" },
   { key: "claude", label: "Claude", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5", keysUrl: "https://console.anthropic.com/settings/keys" },
   { key: "gemini", label: "Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.8-flash", keysUrl: "https://aistudio.google.com/apikey" },
-  { key: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-v4-flash", keysUrl: "https://platform.deepseek.com/api_keys" },
+  { key: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com", model: "deepseek-flash", keysUrl: "https://platform.deepseek.com/api_keys" },
 ];
 
 export const providerSpec = (k: Provider) => PROVIDERS.find((p) => p.key === k) ?? PROVIDERS[0];
@@ -30,19 +30,41 @@ export const DEFAULT_AI: AiSettings = { provider: PROVIDERS[0].key, baseUrl: PRO
 
 const STORE_KEY = "m3e:ai";
 
+/** Models that older versions saved as defaults. A custom model is never replaced. */
+const LEGACY_MODELS: Record<Provider, string[]> = {
+  openai: ["gpt-5.6-luna"],
+  claude: [],
+  gemini: [],
+  deepseek: ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"],
+};
+
+/** Provider URLs whose API root moved, but which still describe the provider itself. */
+const LEGACY_BASE_URLS: Partial<Record<Provider, string[]>> = {
+  deepseek: ["https://api.deepseek.com/v1"],
+};
+
+/** Parse settings from storage and move known stale defaults to the current recommended model. */
+export function normalizeAiSettings(v: Partial<AiSettings> | null | undefined): AiSettings {
+  const provider = PROVIDERS.some((p) => p.key === v?.provider) ? (v!.provider as Provider) : DEFAULT_AI.provider;
+  const spec = providerSpec(provider);
+  const rawUrl = typeof v?.baseUrl === "string" ? v.baseUrl.trim() : "";
+  const baseUrl = rawUrl && !LEGACY_BASE_URLS[provider]?.includes(rawUrl) ? rawUrl : spec.baseUrl;
+  const rawModel = typeof v?.model === "string" ? v.model.trim() : "";
+  const model = rawModel && !LEGACY_MODELS[provider].includes(rawModel) ? rawModel : spec.model;
+  return {
+    provider,
+    baseUrl,
+    model,
+    key: typeof v?.key === "string" ? v.key : "",
+  };
+}
+
 export function loadAiSettings(): AiSettings {
-  const s = { ...DEFAULT_AI };
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const v = JSON.parse(raw) as Partial<AiSettings>;
-      if (PROVIDERS.some((p) => p.key === v.provider)) s.provider = v.provider as Provider;
-      if (typeof v.baseUrl === "string") s.baseUrl = v.baseUrl;
-      if (typeof v.model === "string") s.model = v.model;
-      if (typeof v.key === "string") s.key = v.key;
-    }
+    if (raw) return normalizeAiSettings(JSON.parse(raw) as Partial<AiSettings>);
   } catch {}
-  return s;
+  return { ...DEFAULT_AI };
 }
 
 /** Settings live in this browser only, like the document itself. */
@@ -126,6 +148,40 @@ export async function complete(s: AiSettings, system: string, user: string, sign
   if (typeof c === "string") return c;
   if (Array.isArray(c)) return c.map((x: { text?: string }) => x.text ?? "").join("");
   throw new Error("empty");
+}
+
+/** Verify the provider settings with the smallest possible model request. */
+export async function testConnection(s: AiSettings, signal?: AbortSignal): Promise<string> {
+  if (!hasKey(s)) throw new Error("key");
+  if (!s.model.trim()) throw new Error("model");
+  if (!isSecureUrl(s.baseUrl)) throw new Error("insecure");
+
+  const ac = new AbortController();
+  let timedOut = false;
+  const cancel = () => ac.abort();
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener("abort", cancel, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ac.abort();
+  }, 20_000);
+  try {
+    const reply = await complete(
+      s,
+      "You are a connectivity check. Follow the user's instruction exactly.",
+      "Reply with exactly: CONNECTED",
+      ac.signal,
+      24,
+    );
+    if (!reply.trim()) throw new Error("empty");
+    return reply.trim().slice(0, 200);
+  } catch (e) {
+    if (timedOut) throw new Error("timeout");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+  }
 }
 
 /** the first JSON object in a reply, with any code fence stripped */

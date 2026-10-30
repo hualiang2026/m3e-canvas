@@ -463,6 +463,11 @@ export const UI = {
   aiProvider: { ja: "プロバイダ", en: "Provider", zh: "服务商" },
   aiBaseUrl: { ja: "ベース URL", en: "Base URL", zh: "基础 URL" },
   aiModel: { ja: "モデル ID", en: "Model ID", zh: "模型 ID" },
+  aiModelHint: {
+    ja: "プロバイダーを切り替えると最新の推奨モデルを自動選択します。互換モデルは手入力できます。",
+    en: "Switching provider selects its latest recommended model automatically. Compatible custom models can still be entered.",
+    zh: "切换服务商会自动选择当前推荐的最新模型；也仍可填写兼容的自定义模型。",
+  },
   aiKey: { ja: "API キー", en: "API key", zh: "API 密钥" },
   aiGetKey: { ja: "キーを取得", en: "Get a key", zh: "获取密钥" },
   aiKeyHint: {
@@ -472,6 +477,21 @@ export const UI = {
   },
   aiRestore: { ja: "AI の前と切り替える", en: "Switch between the AI rewrite and the original", zh: "在 AI 改写与原文之间切换" },
   aiApplied: { ja: "適用しました", en: "Applied", zh: "已应用" },
+  aiSave: { ja: "設定を保存", en: "Save settings", zh: "保存设置" },
+  aiSaved: { ja: "保存済み", en: "Saved", zh: "已保存" },
+  aiUnsaved: { ja: "未保存の変更があります", en: "You have unsaved changes", zh: "有未保存的更改" },
+  aiTest: { ja: "接続テスト", en: "Test connection", zh: "测试连接" },
+  aiTesting: { ja: "接続を確認中…", en: "Testing connection…", zh: "正在测试连接…" },
+  aiTestSuccess: {
+    ja: "接続に成功し、モデルから応答がありました。",
+    en: "Connected successfully and received a response from the model.",
+    zh: "连接成功，已收到模型响应。",
+  },
+  aiTestTitle: {
+    ja: "現在の設定で小さなリクエストを送り、接続・認証・モデルを確認します",
+    en: "Send a small request with these settings to verify the connection, key and model",
+    zh: "使用当前配置发送一个小请求，验证网络、密钥和模型是否可用",
+  },
   aiSelectScreen: { ja: "先に画面を選んでください", en: "Select a screen first", zh: "请先选择一个屏幕" },
   aiNoKey: { ja: "AI タブでキーを入れると使えます", en: "Add a key in the AI tab to use this", zh: "在 AI 标签页中填写密钥后即可使用" },
   aiError: { ja: "AI の呼び出しに失敗しました", en: "The AI request failed", zh: "AI 请求失败" },
@@ -480,6 +500,11 @@ export const UI = {
   aiErrorLong: { ja: "返答が長すぎて途中で切れました。画面を減らして試してください", en: "The reply was cut short. Try fewer screens", zh: "回复过长被截断了。请减少屏幕数量再试" },
   aiErrorModel: { ja: "モデル ID を入力してください", en: "Enter a model ID", zh: "请输入模型 ID" },
   aiErrorInsecure: { ja: "ベース URL は https か localhost にしてください", en: "The base URL must use https or point at localhost", zh: "基础 URL 必须使用 https 或指向 localhost" },
+  aiErrorTimeout: {
+    ja: "接続テストがタイムアウトしました。ネットワークと URL を確認してください",
+    en: "The connection test timed out. Check the network and URL",
+    zh: "连接测试超时，请检查网络和 URL",
+  },
   aiErrorNetwork: {
     ja: "接続できませんでした。URL、ネットワーク、CORS の設定を確認してください",
     en: "Could not connect. Check the URL, the network and the server's CORS settings",
@@ -561,11 +586,12 @@ export const KO: Record<UIKey, string> = {
   motionHint: "익스프레시브는 통통 튀는 스프링 효과입니다. 미리보기 화면 전환과 프롬프트에 반영됩니다.", tryIt: "탭하여 확인",
   tidy: "정리", tidyUndo: "정리 실행 취소", tidyDone: "이미 정돈되어 있습니다", placement: "본문의 세로 배치", placeTop: "위에서부터", placeCenter: "가운데", placeBottom: "아래쪽", placeSpread: "균등", align: "정렬", alignLeft: "왼쪽 정렬", alignCenterH: "가로 가운데 정렬", alignRight: "오른쪽 정렬", alignTop: "위쪽 정렬", alignCenterV: "세로 가운데 정렬", alignBottom: "아래쪽 정렬", description: "설명", screenDescription: "이 화면의 용도",
   ai: "AI", promptReset: "생성된 프롬프트로 되돌리기", aiWriteShort: "AI로 작성", aiWrite: "AI에게 작성 맡기기", aiSettings: "AI 설정",
-  aiProvider: "제공업체", aiBaseUrl: "기본 URL", aiModel: "모델 ID", aiKey: "API 키", aiGetKey: "키 받기",
+  aiProvider: "제공업체", aiBaseUrl: "기본 URL", aiModel: "모델 ID", aiModelHint: "제공업체를 바꾸면 최신 권장 모델이 자동 선택됩니다. 호환되는 사용자 지정 모델도 입력할 수 있습니다.", aiKey: "API 키", aiGetKey: "키 받기",
   aiKeyHint: "키는 이 브라우저에만 저장되며 제공업체로 직접 전송됩니다.", aiRestore: "AI 수정본과 원본 전환", aiApplied: "적용됨",
+  aiSave: "설정 저장", aiSaved: "저장됨", aiUnsaved: "저장하지 않은 변경 사항이 있습니다", aiTest: "연결 테스트", aiTesting: "연결 확인 중…", aiTestSuccess: "연결에 성공했고 모델에서 응답을 받았습니다.", aiTestTitle: "현재 설정으로 작은 요청을 보내 연결, 키 및 모델을 확인합니다",
   aiSelectScreen: "먼저 화면을 선택하세요", aiNoKey: "AI 탭에 키를 입력하면 사용할 수 있습니다", aiError: "AI 요청에 실패했습니다",
   aiErrorRefusal: "모델이 답변을 거부했습니다", aiErrorJson: "모델의 응답을 읽을 수 없습니다", aiErrorLong: "답변이 너무 길어 중간에 잘렸습니다. 화면 수를 줄여 다시 시도하세요", aiErrorModel: "모델 ID를 입력하세요",
-  aiErrorInsecure: "기본 URL은 https를 사용하거나 localhost를 가리켜야 합니다", aiErrorNetwork: "연결할 수 없습니다. URL, 네트워크 및 서버의 CORS 설정을 확인하세요",
+  aiErrorInsecure: "기본 URL은 https를 사용하거나 localhost를 가리켜야 합니다", aiErrorTimeout: "연결 테스트 시간이 초과되었습니다. 네트워크와 URL을 확인하세요", aiErrorNetwork: "연결할 수 없습니다. URL, 네트워크 및 서버의 CORS 설정을 확인하세요",
 };
 
 /** the locale each language writes its dates in */

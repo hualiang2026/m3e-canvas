@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { complete, hasKey, isSecureUrl, type AiSettings, type Provider } from "./ai";
+import { complete, hasKey, isSecureUrl, normalizeAiSettings, PROVIDERS, testConnection, type AiSettings, type Provider } from "./ai";
 
 const settings = (over: Partial<AiSettings> = {}): AiSettings =>
   ({ provider: "openai", baseUrl: "https://api.example.test", model: "test-model", key: "test-key", ...over });
@@ -132,5 +132,51 @@ describe("hasKey and isSecureUrl", () => {
     expect(isSecureUrl("http://127.0.0.1:8080/v1")).toBe(true);
     expect(isSecureUrl("http://[::1]:8080/v1")).toBe(true);
     expect(isSecureUrl("http://api.example.test/v1")).toBe(false);
+  });
+});
+
+describe("recommended provider settings", () => {
+  it("uses the current suitable model for each provider", () => {
+    expect(Object.fromEntries(PROVIDERS.map((p) => [p.key, p.model]))).toEqual({
+      openai: "gpt-6-luna",
+      claude: "claude-sonnet-5",
+      gemini: "gemini-3.8-flash",
+      deepseek: "deepseek-flash",
+    });
+  });
+
+  it("migrates stale defaults but preserves custom settings", () => {
+    expect(normalizeAiSettings({ provider: "openai", model: "gpt-5.6-luna", baseUrl: "https://api.openai.com/v1", key: "k" })).toMatchObject({
+      model: "gpt-6-luna",
+      key: "k",
+    });
+    expect(normalizeAiSettings({ provider: "deepseek", model: "deepseek-v4-flash", baseUrl: "https://api.deepseek.com/v1", key: "k" })).toMatchObject({
+      model: "deepseek-flash",
+      baseUrl: "https://api.deepseek.com",
+    });
+    expect(normalizeAiSettings({ provider: "claude", model: "my-proxy-model", baseUrl: "https://proxy.example.test", key: "k" })).toMatchObject({
+      model: "my-proxy-model",
+      baseUrl: "https://proxy.example.test",
+    });
+  });
+});
+
+describe("testConnection", () => {
+  it.each(["openai", "claude", "gemini", "deepseek"] as Provider[])("performs a real completion request for %s", async (provider) => {
+    const response = provider === "claude"
+      ? { content: [{ type: "text", text: "CONNECTED" }] }
+      : { choices: [{ message: { content: "CONNECTED" } }] };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(testConnection(settings({ provider }))).resolves.toBe("CONNECTED");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a hosted provider without a key before calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(testConnection(settings({ key: "" }))).rejects.toThrow("key");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

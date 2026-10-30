@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Palette } from "@/lib/tokens";
 import { t, useLang } from "@/lib/i18n";
-import { AiSettings, PROVIDERS, Provider, providerSpec } from "@/lib/ai";
+import { AiSettings, PROVIDERS, Provider, hasKey, isSecureUrl, providerSpec, testConnection } from "@/lib/ai";
 import { Icon } from "./M3Node";
 
 /** the message shown for a failed request, mapped from the error codes lib/ai throws */
@@ -11,8 +11,10 @@ export function aiErrorText(e: unknown, lang: ReturnType<typeof useLang>): strin
   const m = e instanceof Error ? e.message : String(e);
   if (m === "refusal") return t("aiErrorRefusal", lang);
   if (m === "json" || m === "empty") return t("aiErrorJson", lang);
+  if (m === "key") return t("aiNoKey", lang);
   if (m === "model") return t("aiErrorModel", lang);
   if (m === "insecure") return t("aiErrorInsecure", lang);
+  if (m === "timeout" || (e instanceof Error && e.name === "AbortError")) return t("aiErrorTimeout", lang);
   if (/failed to fetch|networkerror|load failed/i.test(m)) return t("aiErrorNetwork", lang);
   return `${t("aiError", lang)}: ${m}`;
 }
@@ -160,14 +162,108 @@ function ProviderGroup({ value, onChange, p }: { value: Provider; onChange: (k: 
   );
 }
 
-/** The AI tab of the left rail: the provider settings. The actions live with each screen on the right. */
-export function AiPanel({ p, settings, onSettings }: { p: Palette; settings: AiSettings; onSettings: (s: AiSettings) => void }) {
+type TestState = { kind: "idle" | "testing" | "ok" | "error"; message?: string };
+
+/** The AI tab of the left rail: the provider settings. Changes are local until saved, and Test
+ *  performs a real, minimal completion request against the selected model. */
+export function AiPanel({
+  p,
+  settings,
+  savedSettings,
+  onChange,
+  onSave,
+}: {
+  p: Palette;
+  settings: AiSettings;
+  savedSettings: AiSettings;
+  onChange: (s: AiSettings) => void;
+  onSave: (s: AiSettings) => void;
+}) {
   const lang = useLang();
   const spec = providerSpec(settings.provider);
+  const [test, setTest] = useState<TestState>({ kind: "idle" });
+  const testAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => testAbort.current?.abort(), []);
+
+  const edit = (next: AiSettings) => {
+    testAbort.current?.abort();
+    setTest({ kind: "idle" });
+    onChange(next);
+  };
   const pick = (k: Provider) => {
     const s = providerSpec(k);
-    onSettings({ ...settings, provider: k, baseUrl: s.baseUrl, model: s.model });
+    edit({ ...settings, provider: k, baseUrl: s.baseUrl, model: s.model });
   };
+  const dirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
+  const validBase = isSecureUrl(settings.baseUrl);
+  const canSave = dirty && settings.model.trim().length > 0 && validBase;
+  const testReason = !settings.model.trim()
+    ? t("aiErrorModel", lang)
+    : !validBase
+      ? t("aiErrorInsecure", lang)
+      : !hasKey(settings)
+        ? t("aiNoKey", lang)
+        : undefined;
+  const canTest = !testReason && test.kind !== "testing";
+  const save = () => {
+    if (!canSave) return;
+    onSave(settings);
+    setTest((s) => (s.kind === "ok" ? s : { kind: "idle" }));
+  };
+  const runTest = async () => {
+    if (!canTest) return;
+    testAbort.current?.abort();
+    const ac = new AbortController();
+    testAbort.current = ac;
+    setTest({ kind: "testing" });
+    try {
+      await testConnection(settings, ac.signal);
+      setTest({ kind: "ok" });
+    } catch (e) {
+      if (!ac.signal.aborted) setTest({ kind: "error", message: aiErrorText(e, lang) });
+    }
+  };
+  const status =
+    test.kind === "testing"
+      ? t("aiTesting", lang)
+      : test.kind === "ok"
+        ? t("aiTestSuccess", lang)
+        : test.kind === "error"
+          ? test.message
+          : dirty
+            ? t("aiUnsaved", lang)
+            : t("aiSaved", lang);
+  const statusColor = test.kind === "error" ? p.error : test.kind === "ok" ? p.primary : p.onSurfaceVariant;
+  const actionButton = (label: string, icon: string, onClick: () => void, disabled: boolean, title: string, primary = false) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className="m3-press"
+      style={{
+        flex: 1,
+        height: 44,
+        borderRadius: 22,
+        border: primary ? "none" : `1px solid ${p.outlineVariant}`,
+        background: disabled ? p.surfaceContainerHighest : primary ? p.primary : p.surface,
+        color: disabled ? p.onSurfaceVariant : primary ? p.onPrimary : p.primary,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.62 : 1,
+      }}
+    >
+      <span className={test.kind === "testing" && !primary ? "m3-spin" : undefined} style={{ display: "inline-flex" }}>
+        <Icon name={test.kind === "testing" && !primary ? "progress_activity" : icon} size={19} />
+      </span>
+      {label}
+    </button>
+  );
   return (
     <div className="no-scrollbar" style={{ height: "100%", overflowY: "auto", padding: "12px 12px 20px" }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.4, color: p.onSurfaceVariant, padding: "8px 6px 12px" }}>{t("aiSettings", lang)}</div>
@@ -179,11 +275,12 @@ export function AiPanel({ p, settings, onSettings }: { p: Palette; settings: AiS
           </div>
           <div>
             <Label p={p}>{t("aiModel", lang)}</Label>
-            <Input label={t("aiModel", lang)} value={settings.model} onChange={(model) => onSettings({ ...settings, model })} placeholder={spec.model || "model"} p={p} />
+            <Input label={t("aiModel", lang)} value={settings.model} onChange={(model) => edit({ ...settings, model })} placeholder={spec.model || "model"} p={p} />
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: p.onSurfaceVariant, marginTop: 8, padding: "0 4px" }}>{t("aiModelHint", lang)}</div>
           </div>
           <div>
             <Label p={p}>{t("aiBaseUrl", lang)}</Label>
-            <Input label={t("aiBaseUrl", lang)} value={settings.baseUrl} onChange={(baseUrl) => onSettings({ ...settings, baseUrl })} placeholder={spec.baseUrl} p={p} />
+            <Input label={t("aiBaseUrl", lang)} value={settings.baseUrl} onChange={(baseUrl) => edit({ ...settings, baseUrl })} placeholder={spec.baseUrl} p={p} />
           </div>
           <div>
             <Label
@@ -198,8 +295,25 @@ export function AiPanel({ p, settings, onSettings }: { p: Palette; settings: AiS
             >
               {t("aiKey", lang)}
             </Label>
-            <Input label={t("aiKey", lang)} value={settings.key} onChange={(key) => onSettings({ ...settings, key })} placeholder="sk-…" p={p} type="password" />
+            <Input label={t("aiKey", lang)} value={settings.key} onChange={(key) => edit({ ...settings, key })} placeholder="sk-…" p={p} type="password" />
             <div style={{ fontSize: 12, lineHeight: 1.5, color: p.onSurfaceVariant, marginTop: 8, padding: "0 4px" }}>{t("aiKeyHint", lang)}</div>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {actionButton(t("aiSave", lang), "save", save, !canSave, dirty ? t("aiSave", lang) : t("aiSaved", lang), true)}
+            {actionButton(
+              test.kind === "testing" ? t("aiTesting", lang) : t("aiTest", lang),
+              "network_check",
+              () => void runTest(),
+              !canTest,
+              testReason ?? t("aiTestTitle", lang),
+            )}
+          </div>
+          <div
+            role="status"
+            aria-live="polite"
+            style={{ minHeight: 20, padding: "0 4px", fontSize: 12, lineHeight: 1.5, color: statusColor, textWrap: "pretty" }}
+          >
+            {status}
           </div>
         </div>
       </div>
